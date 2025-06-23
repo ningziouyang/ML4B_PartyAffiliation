@@ -5,21 +5,31 @@ import re
 import torch
 from transformers import AutoTokenizer, AutoModel
 
-# Load artifacts
+st.set_page_config(page_title="Tweet-Partei-Predictor", layout="centered")
+
+st.sidebar.title("Über dieses Tool")
+st.sidebar.markdown("""
+Dieses Tool verwendet ein Machine Learning Modell, um Bundestags-Tweets einer Partei zuzuordnen.  
+Modell: **TF-IDF + BERT + engineered Features**  
+Erstellt im Rahmen des **ML4B-Projekts** (2025).
+""")
+
+if "history" not in st.session_state:
+    st.session_state.history = []
+
 MODEL_PATH = "models/lr_tfidf_bert_engineered.joblib"
 VECTORIZER_PATH = "models/tfidf_vectorizer_bert_engineered.joblib"
 SCALER_PATH = "models/feature_scaler_bert_engineered.joblib"
 BERT_PATH = "bert-base-german-cased"
 
-model = joblib.load(MODEL_PATH)
-vectorizer = joblib.load(VECTORIZER_PATH)
-scaler = joblib.load(SCALER_PATH)
+with st.spinner("Lade Modell und Vektorisierer..."):
+    model = joblib.load(MODEL_PATH)
+    vectorizer = joblib.load(VECTORIZER_PATH)
+    scaler = joblib.load(SCALER_PATH)
+    tokenizer = AutoTokenizer.from_pretrained(BERT_PATH)
+    bert_model = AutoModel.from_pretrained(BERT_PATH)
+    bert_model.eval()
 
-tokenizer = AutoTokenizer.from_pretrained(BERT_PATH)
-bert_model = AutoModel.from_pretrained(BERT_PATH)
-bert_model.eval()
-
-# Feature engineering as in training
 POLITICAL_TERMS = [
     "klimaschutz", "freiheit", "bürgergeld", "migration", "rente", "gerechtigkeit",
     "steuern", "digitalisierung", "gesundheit", "bildung", "europa", "verteidigung",
@@ -50,7 +60,6 @@ def count_emojis(text):
         import emoji
         return sum(1 for char in str(text) if char in emoji.EMOJI_DATA)
     except ImportError:
-        # fallback: just count colons
         return str(text).count(":")
 
 def count_hashtags(text):
@@ -87,39 +96,42 @@ def extract_features(text):
     ]
     return np.array(feats).reshape(1, -1)
 
-# BERT CLS embedding
 def embed_single_text(text, tokenizer, model, max_len=64):
     with torch.no_grad():
         encoded = tokenizer(text, truncation=True, padding="max_length", max_length=max_len, return_tensors="pt")
         output = model(**encoded)
-        # CLS token
         cls_emb = output.last_hidden_state[:, 0, :].squeeze().cpu().numpy()
     return cls_emb.reshape(1, -1)
 
-# Streamlit UI 
-st.title("Parteivorhersage für Bundestags-Tweets (ML4B-Projekt)")
+st.title("🇩🇪 Bundestags-Tweet Parteivorhersage")
+
 tweet = st.text_area("Gib einen Bundestags-Tweet ein:")
 
 if tweet and st.button("Vorhersagen"):
-    # 1. TF-IDF
-    X_tfidf = vectorizer.transform([tweet])  # (1, 2000)
-    # 2. BERT
-    X_bert = embed_single_text(tweet, tokenizer, bert_model)  # (1, 768)
-    # 3. Engineered features
-    X_eng = extract_features(tweet)  # (1, 14)
-    X_eng_scaled = scaler.transform(X_eng)
-    # 4. Combine
-    X_all = np.hstack([X_tfidf.toarray(), X_bert, X_eng_scaled])
-    # 5. Predict
-    pred = model.predict(X_all)[0]
-    st.success(f"**Vorhergesagte Partei:** {pred}")
+    with st.spinner("Analysiere Tweet..."):
+        X_tfidf = vectorizer.transform([tweet])
+        X_bert = embed_single_text(tweet, tokenizer, bert_model)
+        X_eng = extract_features(tweet)
+        X_eng_scaled = scaler.transform(X_eng)
+        X_all = np.hstack([X_tfidf.toarray(), X_bert, X_eng_scaled])
+        pred = model.predict(X_all)[0]
 
-    # show class probabilities
-    if hasattr(model, "predict_proba"):
-        probs = model.predict_proba(X_all)[0]
-        parties = model.classes_
-        st.subheader("Wahrscheinlichkeit je Partei")
-        st.bar_chart({p: float(prob) for p, prob in zip(parties, probs)})
+        st.success(f"**Vorhergesagte Partei:** `{pred}`")
+
+        if hasattr(model, "predict_proba"):
+            probs = model.predict_proba(X_all)[0]
+            parties = model.classes_
+            st.subheader("Vorhersage-Wahrscheinlichkeiten")
+            st.bar_chart({p: float(prob) for p, prob in zip(parties, probs)})
+
+        st.session_state.history.insert(0, {"text": tweet, "prediction": pred})
+        st.session_state.history = st.session_state.history[:5]
+
+if st.session_state.history:
+    st.write("---")
+    st.subheader("Letzte Vorhersagen")
+    for item in st.session_state.history:
+        st.markdown(f"- _\"{item['text'][:80]}...\"_ → **{item['prediction']}**")
 
 st.write("---")
-st.markdown("**Hinweis:** Die Vorhersage basiert auf einer Kombination von TF-IDF, BERT-Embeddings und engineered Features.")
+st.markdown("Dieses Tool kombiniert **klassische Merkmale**, **BERT-Embedding** und **TF-IDF-Vektoren**, um möglichst zuverlässig vorherzusagen, welche Partei hinter einem Tweet steckt.")
