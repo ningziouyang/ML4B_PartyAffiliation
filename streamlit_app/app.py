@@ -26,7 +26,6 @@ POLITICAL_TERMS = [
     "arbeitsmarkt", "soziales", "integration", "umweltschutz", "innenpolitik"
 ]
 
-# Manuelle Merkmalsextraktion mit 14 Features (letztes als Dummy für BERT-Ersatz)
 def extract_features(text):
     if not text:
         text = ""
@@ -49,7 +48,7 @@ def extract_features(text):
             len(re.findall(r"http\S+|www\S+", text)),
             len(re.findall(r"\.\.+", text)),
             int(text.lower().strip().startswith("rt @")),
-            0.0  # Dummy-Feature für BERT-Platzhalter
+            0.0
         ]
         return np.array(features, dtype=np.float32).reshape(1, -1)
     except Exception as e:
@@ -65,7 +64,8 @@ def predict_party(tweet, model, vectorizer, scaler):
         X_tfidf = vectorizer.transform([tweet])
         X_eng = extract_features(tweet)
         X_eng_scaled = scaler.transform(X_eng)
-        X_all = np.hstack([X_tfidf.toarray(), X_eng_scaled])
+        bert_placeholder = np.zeros((1, 768), dtype=np.float32)
+        X_all = np.hstack([X_tfidf.toarray(), bert_placeholder, X_eng_scaled])
 
         pred = model.predict(X_all)[0]
         probs = model.predict_proba(X_all)[0] if hasattr(model, "predict_proba") else None
@@ -77,7 +77,7 @@ def predict_party(tweet, model, vectorizer, scaler):
 
 def main():
     st.title("🗳️ Parteivorhersage für Bundestags-Tweets")
-    st.markdown("*Ohne BERT-Modell – nur TF-IDF & manuelle Merkmale*")
+    st.markdown("*Verwendet nur TF-IDF & manuelle Features, BERT eingebettet als Platzhalter*")
 
     model, vectorizer, scaler = load_models()
     if model is None:
