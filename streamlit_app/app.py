@@ -5,121 +5,138 @@ import re
 import torch
 from transformers import AutoTokenizer, AutoModel
 
-# Load artifacts
+# Konfiguration und Konstanten
 MODEL_PATH = "models/lr_tfidf_bert_engineered.joblib"
 VECTORIZER_PATH = "models/tfidf_vectorizer_bert_engineered.joblib"
 SCALER_PATH = "models/feature_scaler_bert_engineered.joblib"
 BERT_PATH = "bert-base-german-cased"
 
-model = joblib.load(MODEL_PATH)
-vectorizer = joblib.load(VECTORIZER_PATH)
-scaler = joblib.load(SCALER_PATH)
+# Automatische Geräteerkennung (priorisiert GPU)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-tokenizer = AutoTokenizer.from_pretrained(BERT_PATH)
-bert_model = AutoModel.from_pretrained(BERT_PATH)
-bert_model.eval()
+# Ressourcen cachen um wiederholtes Laden zu vermeiden
+@st.cache_resource
+def load_artifacts():
+    """Lädt alle vortrainierten Modelle und Tools"""
+    try:
+        model = joblib.load(MODEL_PATH)
+        vectorizer = joblib.load(VECTORIZER_PATH)
+        scaler = joblib.load(SCALER_PATH)
+        tokenizer = AutoTokenizer.from_pretrained(BERT_PATH)
+        bert_model = AutoModel.from_pretrained(BERT_PATH).to(device)
+        bert_model.eval()
+        return model, vectorizer, scaler, tokenizer, bert_model
+    except Exception as e:
+        st.error(f"Modellladefehler: {str(e)}")
+        raise
 
-# Feature engineering as in training
+# Modelle und Tools laden
+model, vectorizer, scaler, tokenizer, bert_model = load_artifacts()
+
+# Liste politischer Begriffe (für Feature Engineering)
 POLITICAL_TERMS = [
     "klimaschutz", "freiheit", "bürgergeld", "migration", "rente", "gerechtigkeit",
-    "steuern", "digitalisierung", "gesundheit", "bildung", "europa", "verteidigung",
-    "arbeitsmarkt", "soziales", "integration", "umweltschutz", "innenpolitik"
+    "steuern", "digitalisierung", "gesundheit", "bildung", "europa", "verteidigung"
 ]
 
+# --- Feature Engineering Funktionen ---
 def count_political_terms(text):
+    """Zählt Vorkommen politischer Begriffe"""
     text = str(text).lower()
     return sum(1 for word in POLITICAL_TERMS if word in text)
 
 def uppercase_ratio(text):
+    """Berechnet Großbuchstabenanteil"""
     text = str(text)
-    if len(text) == 0:
-        return 0
-    return sum(1 for c in text if c.isupper()) / len(text)
-
-def avg_word_length(text):
-    words = re.findall(r"\w+", str(text))
-    if not words:
-        return 0
-    return sum(len(w) for w in words) / len(words)
-
-def multi_punct_count(text):
-    return len(re.findall(r"[!?]{2,}", str(text)))
-
-def count_emojis(text):
-    try:
-        import emoji
-        return sum(1 for char in str(text) if char in emoji.EMOJI_DATA)
-    except ImportError:
-        # fallback: just count colons
-        return str(text).count(":")
-
-def count_hashtags(text):
-    return len(re.findall(r"#\w+", str(text)))
-
-def count_mentions(text):
-    return len(re.findall(r"@\w+", str(text)))
-
-def count_urls(text):
-    return len(re.findall(r"http\S+|www\S+|https\S+", str(text)))
-
-def count_dots(text):
-    return len(re.findall(r"\.\.+", str(text)))
-
-def is_retweet(text):
-    return int(str(text).strip().lower().startswith("rt @"))
+    return sum(1 for c in text if c.isupper()) / len(text) if text else 0
 
 def extract_features(text):
+    """Extrahiert 14 manuelle Features"""
+    words = re.findall(r"\w+", str(text))
     feats = [
-        len(str(text)),                              # tweet_length_chars
-        len(str(text).split()),                      # tweet_length_words
-        avg_word_length(text),                       # avg_word_length
-        uppercase_ratio(text),                       # uppercase_ratio
-        str(text).count("!"),                        # exclamations
-        str(text).count("?"),                        # questions
-        multi_punct_count(text),                     # multi_punct_count
-        count_political_terms(text),                 # political_term_count
-        count_emojis(text),                          # num_emojis
-        count_hashtags(text),                        # num_hashtags
-        count_mentions(text),                        # num_mentions
-        count_urls(text),                            # num_urls
-        count_dots(text),                            # dots
-        is_retweet(text),                            # is_retweet
+        len(str(text)),                              # Zeichenanzahl
+        len(words),                                  # Wortanzahl
+        sum(len(w) for w in words)/len(words) if words else 0,  # Durchschn. Wortlänge
+        uppercase_ratio(text),                       # Großbuchstabenanteil
+        str(text).count("!"),                        # Ausrufezeichen
+        str(text).count("?"),                        # Fragezeichen
+        len(re.findall(r"[!?]{2,}", str(text))),     # Mehrfachzeichen
+        count_political_terms(text),                 # Politische Begriffe
+        sum(1 for c in str(text) if c in emoji.EMOJI_DATA else 0),  # Emojis
+        len(re.findall(r"#\w+", str(text))),         # Hashtags
+        len(re.findall(r"@\w+", str(text))),         # Erwähnungen
+        len(re.findall(r"http\S+|www\S+|https\S+", str(text))),  # URLs
+        len(re.findall(r"\.\.+", str(text))),        # Mehrfachpunkte
+        int(str(text).strip().lower().startswith("rt @"))  # Retweet-Kennung
     ]
     return np.array(feats).reshape(1, -1)
 
-# BERT CLS embedding
+# --- BERT Embedding Funktion (kritische Fix) ---
 def embed_single_text(text, tokenizer, model, max_len=64):
+    """Erzeugt BERT-Embedding für einzelnen Text"""
+    device = next(model.parameters()).device  # Aktuelles Gerät des Modells
     with torch.no_grad():
-        encoded = tokenizer(text, truncation=True, padding="max_length", max_length=max_len, return_tensors="pt")
+        # Eingabedaten auf Modellgerät verschieben
+        encoded = tokenizer(
+            text,
+            truncation=True,
+            padding="max_length",
+            max_length=max_len,
+            return_tensors="pt"
+        ).to(device)
         output = model(**encoded)
-        # CLS token
-        cls_emb = output.last_hidden_state[:, 0, :].squeeze().cpu().numpy()
+        # [CLS]-Token Embedding als numpy Array
+        cls_emb = output.last_hidden_state[:, 0, :].cpu().numpy()
     return cls_emb.reshape(1, -1)
 
-# Streamlit UI 
-st.title("Parteivorhersage für Bundestags-Tweets (ML4B-Projekt)")
-tweet = st.text_area("Gib einen Bundestags-Tweet ein:")
+# --- Streamlit UI ---
+st.title("🇩🇪 Deutscher Bundestag Tweet-Analyse")
+st.markdown("ML-Modell mit TF-IDF, BERT-Embeddings und manuellen Features")
 
-if tweet and st.button("Vorhersagen"):
-    # 1. TF-IDF
-    X_tfidf = vectorizer.transform([tweet])  # (1, 2000)
-    # 2. BERT
-    X_bert = embed_single_text(tweet, tokenizer, bert_model)  # (1, 768)
-    # 3. Engineered features
-    X_eng = extract_features(tweet)  # (1, 14)
-    X_eng_scaled = scaler.transform(X_eng)
-    # 4. Combine
-    X_all = np.hstack([X_tfidf.toarray(), X_bert, X_eng_scaled])
-    # 5. Predict
-    pred = model.predict(X_all)[0]
-    st.success(f"**Vorhergesagte Partei:** {pred}")
+tweet = st.text_area(
+    "Tweet eingeben (Deutsch):",
+    placeholder="z.B.: 'Klimaschutz ist unsere Priorität...'",
+    max_chars=280
+)
 
-    # show class probabilities
-    if hasattr(model, "predict_proba"):
-        probs = model.predict_proba(X_all)[0]
-        parties = model.classes_
-        st.subheader("Wahrscheinlichkeit je Partei")
-        st.bar_chart({p: float(prob) for p, prob in zip(parties, probs)})
+if st.button("Partei vorhersagen", type="primary"):
+    if not tweet.strip():
+        st.warning("Bitte gültigen Tweet eingeben!")
+    else:
+        with st.spinner("Analyse läuft..."):
+            try:
+                # 1. TF-IDF Features
+                X_tfidf = vectorizer.transform([tweet])
+                # 2. BERT Embeddings
+                X_bert = embed_single_text(tweet, tokenizer, bert_model)
+                # 3. Manuelle Features
+                X_eng = extract_features(tweet)
+                X_eng_scaled = scaler.transform(X_eng)
+                # 4. Feature-Kombination
+                X_all = np.hstack([X_tfidf.toarray(), X_bert, X_eng_scaled])
+                # 5. Vorhersage
+                pred = model.predict(X_all)[0]
+                
+                # Ergebnis anzeigen
+                st.success(f"**Vorhergesagte Partei**: {pred}")
+                
+                # Wahrscheinlichkeitsverteilung (falls unterstützt)
+                if hasattr(model, "predict_proba"):
+                    probs = model.predict_proba(X_all)[0]
+                    st.subheader("Parteien-Wahrscheinlichkeiten")
+                    st.bar_chart({
+                        partei: prob 
+                        for partei, prob in zip(model.classes_, probs)
+                    })
 
-st.write("---")
-st.markdown("**Hinweis:** Die Vorhersage basiert auf einer Kombination von TF-IDF, BERT-Embeddings und engineered Features.")
+            except Exception as e:
+                st.error(f"Vorhersagefehler: {str(e)}")
+
+# Fußzeile
+st.markdown("---")
+st.caption("""
+ Hinweis:  
+- Modell trainiert mit Tweets von Bundestagsmitgliedern  
+- Beste Ergebnisse mit deutschen politischen Inhalten  
+- Maximallänge: 280 Zeichen (Twitter-Limit)
+""")
