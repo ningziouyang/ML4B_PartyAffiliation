@@ -1,11 +1,14 @@
 # 1 Introduction
 - Motivation:  
-In today’s digital landscape, politicians increasingly use platforms like Twitter to share their views, often without explicitly mentioning their party affiliation. This makes it difficult for researchers, journalists, and citizens to understand the political context behind individual statements. 
-At the same time, the rise of disinformation and political polarization highlights the need for better tools to analyze political communication online. Our machine learning model addresses this gap by predicting party affiliation based solely on tweet content. 
-This enables large-scale, automated analysis of political discourse, supports transparency, and helps detect patterns in political messaging that would otherwise remain hidden.
+In today’s digital world, political communication increasingly takes place on social media platforms such as
+Twitter. Politicians, parties, journalists, and citizens all participate in debates using short, emotionally
+charged text formats. These messages rarely include clear party identifiers, making it difficult to assign
+statements to political affiliations.
+Our project explores whether it is possible to predict the party affiliation associated with a tweet using
+only the textual content. The goal is to build a machine learning model that classifies tweets by party
+labels, uncovering patterns in political language and enabling automated analysis of political discourse
 - Research question:  
-Can a machine learning model accurately predict the political party affiliation of German Bundestag members based solely on the textual content of their tweets?
-- How is this document structured
+Can political orientation be detected from tweets using only their text without additional metadata?
 # 2 Related Work
 Previous projects have used NLP and machine learning to analyze political communication. Some studies relied on parliamentary speeches, party manifestos, or user profiles. Others explored sentiment and stance classification or ideological clustering. Our work is inspired by those approaches but takes a minimalist route: no metadata, no user history, and no time-based features,  just raw tweet content.
 # 3 Methodology
