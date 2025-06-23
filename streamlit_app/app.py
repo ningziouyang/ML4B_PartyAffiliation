@@ -123,4 +123,3 @@ if tweet and st.button("Vorhersagen"):
 
 st.write("---")
 st.markdown("**Hinweis:** Die Vorhersage basiert auf einer Kombination von TF-IDF, BERT-Embeddings und engineered Features.")
-
