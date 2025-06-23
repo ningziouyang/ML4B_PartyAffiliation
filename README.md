@@ -7,38 +7,49 @@ This enables large-scale, automated analysis of political discourse, supports tr
 Can a machine learning model accurately predict the political party affiliation of German Bundestag members based solely on the textual content of their tweets?
 - How is this document structured
 # 2 Related Work
-- What have others done in your area of work/ to answer similar questions?
-- Discussing existing work in the context of your work
+Previous projects have used NLP and machine learning to analyze political communication. Some studies relied on parliamentary speeches, party manifestos, or user profiles. Others explored sentiment and stance classification or ideological clustering. Our work is inspired by those approaches but takes a minimalist route: no metadata, no user history, and no time-based features,  just raw tweet content.
 # 3 Methodology
 ## 3.1 General Methodology
-- How did you proceed to achieve your project goals? 
-- Describe which steps you have undertaken
-Aim: Others should understand your research process
+We began by loading a dataset of tweets labeled with political party affiliations. We designed an
+experimental pipeline that:
+- Cleans and processes tweet text
+- Extracts relevant linguistic features
+- Trains and evaluates multiple classifiers
 ## 3.2 Data Understanding and Preparation
-- Introduce the dataset to the reader
-- Describe structure and size of your dataset
-- Describe specialities
-- Describe how you prepare the dataset for your project
+The dataset consists of German tweets, each labeled with a political party. Key challenges included short and
+informal language, use of slang or hashtags, and limited context per tweet.
+We applied several preprocessing steps:
+- Lowercasing and punctuation removal
+- Stopword removal
+- Tokenization
+- Vectorization using TF-IDF
+- Semantic feature extraction using BERT
 ## 3.3 Modeling and Evaluation
-- Describe the model architecture(s) you selected
-- Describe how you train your models
-- Describe how you evaluate your models/ which metrics you use
+We trained and compared several machine learning models:
+- Logistic Regression (baseline)
+- Logistic Regression with engineered features (TF-IDF + BERT)
+Models were evaluated using standard classification metrics such as accuracy, precision, recall, and F1-score.
+The best-performing model was a logistic regression using a combination of TF-IDF and semantic embeddings from
+BERT.
 # 4 Results
-- Describe what artifacts you have build
-- Describe the libraries and tools you use
-- Describe the concept of your app
-- Describe the results you achieve by applying your trained models on unseen data
-
-Descriptive Language (no judgement, no discussion in this section -> just show what you built)
+The system successfully classifies tweets with reasonable accuracy, based only on textual features. It
+highlights common linguistic patterns used by different political parties and demonstrates the feasibility of
+lightweight political orientation prediction.
 # 5 Discussion
-Now its time to discuss your results/ artifacts/ app 
-- Show the limitations : e.g. missing data, limited training ressources/ GPU availability in Colab, limitaitons of the app
-- Discuss your work from an ethics perspective:
-- Dangers of the application of your work (for example discrimination through ML models)
-- Transparency 
-- Effects on society and environment
-
-Possible sources https://algorithmwatch.org/en/ Have a look at the "Automating Society Report"; https://ainowinstitute.org/ Have a look at this website and their publications  
-Further Research: What could be next steps for other researchers (specific research questions)
+This project demonstrates promising results, but several limitations remain:
+- The dataset is relatively small and may not generalize
+- Political messaging can be subtle, ironic, or context-dependent
+- Tweets from individuals unaffiliated with parties may introduce noise
+- Model performance is sensitive to the quality of preprocessing and feature selection
+From an ethical standpoint, political classification systems must be used with caution. Automated labeling can
+lead to misinterpretation, manipulation, or profiling. Transparency and explainability of such systems are
+crucial.
 # 6 Conclusion
-- Short summary of your findings and outlook
+Our system shows that political party affiliation can be predicted to a reasonable extent using only tweet
+text. It uses a modular and interpretable architecture, making it suitable for educational use or as a
+foundation for further political language research.
+Future improvements could involve:
+- Using more advanced deep learning models
+- Expanding datasets to include more parties and domains
+- Integrating irony or sarcasm detection
+- Analyzing temporal evolution of political language
