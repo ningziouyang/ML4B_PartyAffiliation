@@ -8,7 +8,6 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Modelle zwischenspeichern
 @st.cache_resource
 def load_models():
     try:
@@ -21,14 +20,13 @@ def load_models():
         st.error(f"Modellladefehler: {e}")
         return None, None, None
 
-# Liste politischer Schlüsselbegriffe
 POLITICAL_TERMS = [
     "klimaschutz", "freiheit", "bürgergeld", "migration", "rente", "gerechtigkeit",
     "steuern", "digitalisierung", "gesundheit", "bildung", "europa", "verteidigung",
     "arbeitsmarkt", "soziales", "integration", "umweltschutz", "innenpolitik"
 ]
 
-# Manuelle Merkmalsextraktion aus dem Tweet
+# Manuelle Merkmalsextraktion mit 14 Features (letztes als Dummy für BERT-Ersatz)
 def extract_features(text):
     if not text:
         text = ""
@@ -50,14 +48,14 @@ def extract_features(text):
             len(re.findall(r"@\w+", text)),
             len(re.findall(r"http\S+|www\S+", text)),
             len(re.findall(r"\.\.+", text)),
-            int(text.lower().strip().startswith("rt @"))
+            int(text.lower().strip().startswith("rt @")),
+            0.0  # Dummy-Feature für BERT-Platzhalter
         ]
         return np.array(features, dtype=np.float32).reshape(1, -1)
     except Exception as e:
         logger.error(f"Fehler bei Merkmalsextraktion: {e}")
-        return np.zeros((1, 13), dtype=np.float32)
+        return np.zeros((1, 14), dtype=np.float32)
 
-# Vorhersagefunktion (ohne BERT)
 def predict_party(tweet, model, vectorizer, scaler):
     try:
         if not tweet or not tweet.strip():
@@ -77,7 +75,6 @@ def predict_party(tweet, model, vectorizer, scaler):
         logger.error(f"Fehler bei Vorhersage: {e}")
         return None, None, f"Vorhersagefehler: {str(e)}"
 
-# Streamlit-App starten
 def main():
     st.title("🗳️ Parteivorhersage für Bundestags-Tweets")
     st.markdown("*Ohne BERT-Modell – nur TF-IDF & manuelle Merkmale*")
