@@ -51,7 +51,7 @@ def uppercase_ratio(text):
     return sum(1 for c in text if c.isupper()) / len(text) if text else 0
 
 def extract_features(text):
-    """Extrahiert 14 manuelle Features"""
+    """Extrahiert 13 manuelle Features (ohne Emoji)"""
     words = re.findall(r"\w+", str(text))
     feats = [
         len(str(text)),                              # Zeichenanzahl
@@ -62,7 +62,6 @@ def extract_features(text):
         str(text).count("?"),                        # Fragezeichen
         len(re.findall(r"[!?]{2,}", str(text))),     # Mehrfachzeichen
         count_political_terms(text),                 # Politische Begriffe
-        sum(1 for c in str(text) if c in emoji.EMOJI_DATA else 0),  # Emojis
         len(re.findall(r"#\w+", str(text))),         # Hashtags
         len(re.findall(r"@\w+", str(text))),         # Erwähnungen
         len(re.findall(r"http\S+|www\S+|https\S+", str(text))),  # URLs
@@ -71,7 +70,7 @@ def extract_features(text):
     ]
     return np.array(feats).reshape(1, -1)
 
-# --- BERT Embedding Funktion (kritische Fix) ---
+# --- BERT Embedding Funktion ---
 def embed_single_text(text, tokenizer, model, max_len=64):
     """Erzeugt BERT-Embedding für einzelnen Text"""
     device = next(model.parameters()).device  # Aktuelles Gerät des Modells
@@ -135,7 +134,7 @@ if st.button("Partei vorhersagen", type="primary"):
 # Fußzeile
 st.markdown("---")
 st.caption("""
- Hinweis:  
+⚠️ Hinweis:  
 - Modell trainiert mit Tweets von Bundestagsmitgliedern  
 - Beste Ergebnisse mit deutschen politischen Inhalten  
 - Maximallänge: 280 Zeichen (Twitter-Limit)
