@@ -57,7 +57,7 @@ df_balanced = (
 )
 X_text_bal = df_balanced["text"].tolist()
 X_numeric_bal = df_balanced[feature_cols].values
-y_bal = df_balanced["parted"]
+y_bal = df_balanced["partei"]
 
 # Train/test split on balanced data
 X_text_train, X_text_test, X_num_train, X_num_test, y_train, y_test = train_test_split(
