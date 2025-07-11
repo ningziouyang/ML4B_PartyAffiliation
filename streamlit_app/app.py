@@ -5,21 +5,22 @@ import re
 import torch
 from transformers import AutoTokenizer, AutoModel
 
+# ==== Path einstellen ====
 MODEL_OPTIONS = {
     "TF-IDF baseline (no_urls)": {
-        "model": "models/lr_model_no_urls.joblib",
-        "vectorizer": "models/tfidf_no_urls.joblib",
+        "model": "../models/lr_model_no_urls.joblib",
+        "vectorizer": "../models/tfidf_no_urls.joblib",
         "scaler": None
     },
     "TF-IDF + Extra Features (no_urls)": {
-        "model": "models/lr_model_extra_no_urls.joblib",
-        "vectorizer": "models/tfidf_extra_no_urls.joblib",
-        "scaler": "models/scaler_extra_no_urls.joblib"
+        "model": "../models/lr_model_extra_no_urls.joblib",
+        "vectorizer": "../models/tfidf_extra_no_urls.joblib",
+        "scaler": "../models/scaler_extra_no_urls.joblib"
     },
     "TF-IDF + BERT + Engineered": {
-        "model": "models/lr_model_combined.joblib",
-        "vectorizer": "models/tfidf_vectorizer_bert_engineered.joblib",
-        "scaler": "models/feature_scaler_bert_engineered.joblib"
+        "model": "../models/lr_model_combined.joblib",
+        "vectorizer": "../models/tfidf_vectorizer_bert_engineered.joblib",
+        "scaler": "../models/feature_scaler_bert_engineered.joblib"
     }
 }
 
