@@ -5,7 +5,6 @@ import re
 import torch
 from transformers import AutoTokenizer, AutoModel
 
-# ==== 设置路径 ====
 MODEL_OPTIONS = {
     "TF-IDF baseline (no_urls)": {
         "model": "models/lr_model_no_urls.joblib",
@@ -24,7 +23,7 @@ MODEL_OPTIONS = {
     }
 }
 
-# ==== 选择模型 ====
+# ==== Model auswählen ====
 st.title("Parteivorhersage für Bundestags-Tweets")
 choice = st.selectbox("Wähle ein Modell:", list(MODEL_OPTIONS.keys()))
 info = MODEL_OPTIONS[choice]
