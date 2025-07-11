@@ -5,68 +5,54 @@ import re
 import torch
 from transformers import AutoTokenizer, AutoModel
 
-# Load artifacts
-MODEL_PATH = "models/lr_tfidf_bert_engineered.joblib"
-VECTORIZER_PATH = "models/tfidf_vectorizer_bert_engineered.joblib"
-SCALER_PATH = "models/feature_scaler_bert_engineered.joblib"
-BERT_PATH = "bert-base-german-cased"
+# ==== 设置路径 ====
+MODEL_OPTIONS = {
+    "TF-IDF baseline (no_urls)": {
+        "model": "models/lr_model_no_urls.joblib",
+        "vectorizer": "models/tfidf_no_urls.joblib",
+        "scaler": None
+    },
+    "TF-IDF + Extra Features (no_urls)": {
+        "model": "models/lr_model_extra_no_urls.joblib",
+        "vectorizer": "models/tfidf_extra_no_urls.joblib",
+        "scaler": "models/scaler_extra_no_urls.joblib"
+    },
+    "TF-IDF + BERT + Engineered": {
+        "model": "models/lr_model_combined.joblib",
+        "vectorizer": "models/tfidf_vectorizer_bert_engineered.joblib",
+        "scaler": "models/feature_scaler_bert_engineered.joblib"
+    }
+}
 
-model = joblib.load(MODEL_PATH)
-vectorizer = joblib.load(VECTORIZER_PATH)
-scaler = joblib.load(SCALER_PATH)
+# ==== 选择模型 ====
+st.title("Parteivorhersage für Bundestags-Tweets")
+choice = st.selectbox("Wähle ein Modell:", list(MODEL_OPTIONS.keys()))
+info = MODEL_OPTIONS[choice]
 
-tokenizer = AutoTokenizer.from_pretrained(BERT_PATH)
-bert_model = AutoModel.from_pretrained(BERT_PATH)
-bert_model.eval()
+model = joblib.load(info["model"])
+vectorizer = joblib.load(info["vectorizer"])
+scaler = joblib.load(info["scaler"]) if info["scaler"] else None
 
-# Feature engineering as in training
+# ==== BERT ====
+use_bert = "BERT" in choice
+if use_bert:
+    tokenizer = AutoTokenizer.from_pretrained("bert-base-german-cased")
+    bert_model = AutoModel.from_pretrained("bert-base-german-cased")
+    bert_model.eval()
+
+# ==== Feature Funktionen ====
 POLITICAL_TERMS = [
     "klimaschutz", "freiheit", "bürgergeld", "migration", "rente", "gerechtigkeit",
     "steuern", "digitalisierung", "gesundheit", "bildung", "europa", "verteidigung",
     "arbeitsmarkt", "soziales", "integration", "umweltschutz", "innenpolitik"
 ]
 
-def count_political_terms(text):
-    text = str(text).lower()
-    return sum(1 for word in POLITICAL_TERMS if word in text)
-
-def uppercase_ratio(text):
-    text = str(text)
-    if len(text) == 0:
-        return 0
-    return sum(1 for c in text if c.isupper()) / len(text)
-
-def avg_word_length(text):
-    words = re.findall(r"\w+", str(text))
-    if not words:
-        return 0
-    return sum(len(w) for w in words) / len(words)
-
-def multi_punct_count(text):
-    return len(re.findall(r"[!?]{2,}", str(text)))
-
 def count_emojis(text):
     try:
         import emoji
         return sum(1 for char in str(text) if char in emoji.EMOJI_DATA)
     except ImportError:
-        # fallback: just count colons
         return str(text).count(":")
-
-def count_hashtags(text):
-    return len(re.findall(r"#\w+", str(text)))
-
-def count_mentions(text):
-    return len(re.findall(r"@\w+", str(text)))
-
-def count_urls(text):
-    return len(re.findall(r"http\S+|www\S+|https\S+", str(text)))
-
-def count_dots(text):
-    return len(re.findall(r"\.\.+", str(text)))
-
-def is_retweet(text):
-    return int(str(text).strip().lower().startswith("rt @"))
 
 def extract_features(text):
     feats = [
@@ -87,39 +73,63 @@ def extract_features(text):
     ]
     return np.array(feats).reshape(1, -1)
 
-# BERT CLS embedding
-def embed_single_text(text, tokenizer, model, max_len=64):
-    with torch.no_grad():
-        encoded = tokenizer(text, truncation=True, padding="max_length", max_length=max_len, return_tensors="pt")
-        output = model(**encoded)
-        # CLS token
-        cls_emb = output.last_hidden_state[:, 0, :].squeeze().cpu().numpy()
-    return cls_emb.reshape(1, -1)
+def avg_word_length(text):
+    words = re.findall(r"\w+", str(text))
+    return sum(len(w) for w in words) / len(words) if words else 0
 
-# Streamlit UI 
-st.title("Parteivorhersage für Bundestags-Tweets (ML4B-Projekt)")
+def uppercase_ratio(text):
+    text = str(text)
+    return sum(1 for c in text if c.isupper()) / len(text) if text else 0
+
+def multi_punct_count(text):
+    return len(re.findall(r"[!?]{2,}", str(text)))
+
+def count_political_terms(text):
+    text = str(text).lower()
+    return sum(1 for word in POLITICAL_TERMS if word in text)
+
+def count_hashtags(text): return len(re.findall(r"#\w+", str(text)))
+def count_mentions(text): return len(re.findall(r"@\w+", str(text)))
+def count_urls(text): return len(re.findall(r"http\S+|www\S+|https\S+", str(text)))
+def count_dots(text): return len(re.findall(r"\.\.+", str(text)))
+def is_retweet(text): return int(str(text).strip().lower().startswith("rt @"))
+
+def embed_single_text(text):
+    with torch.no_grad():
+        encoded = tokenizer(text, truncation=True, padding="max_length", max_length=64, return_tensors="pt")
+        output = bert_model(**encoded)
+        return output.last_hidden_state[:, 0, :].squeeze().cpu().numpy().reshape(1, -1)
+
+# ==== UI ====
 tweet = st.text_area("Gib einen Bundestags-Tweet ein:")
 
 if tweet and st.button("Vorhersagen"):
     # 1. TF-IDF
-    X_tfidf = vectorizer.transform([tweet])  # (1, 2000)
-    # 2. BERT
-    X_bert = embed_single_text(tweet, tokenizer, bert_model)  # (1, 768)
-    # 3. Engineered features
-    X_eng = extract_features(tweet)  # (1, 14)
-    X_eng_scaled = scaler.transform(X_eng)
-    # 4. Combine
-    X_all = np.hstack([X_tfidf.toarray(), X_bert, X_eng_scaled])
-    # 5. Predict
+    X_tfidf = vectorizer.transform([tweet])
+    # 2. Extra Features
+    if scaler:
+        X_eng = extract_features(tweet)
+        X_eng_scaled = scaler.transform(X_eng)
+    # 3. BERT
+    if use_bert:
+        X_bert = embed_single_text(tweet)
+
+    # ==== Kombiniere ====
+    if use_bert:
+        X_all = np.hstack([X_tfidf.toarray(), X_bert, X_eng_scaled])
+    elif scaler:
+        X_all = np.hstack([X_tfidf.toarray(), X_eng_scaled])
+    else:
+        X_all = X_tfidf
+
+    # ==== Vorhersage ====
     pred = model.predict(X_all)[0]
     st.success(f"**Vorhergesagte Partei:** {pred}")
 
-    # show class probabilities
     if hasattr(model, "predict_proba"):
         probs = model.predict_proba(X_all)[0]
-        parties = model.classes_
-        st.subheader("Wahrscheinlichkeit je Partei")
-        st.bar_chart({p: float(prob) for p, prob in zip(parties, probs)})
+        st.subheader("Wahrscheinlichkeiten je Partei")
+        st.bar_chart({p: float(prob) for p, prob in zip(model.classes_, probs)})
 
-st.write("---")
-st.markdown("**Hinweis:** Die Vorhersage basiert auf einer Kombination von TF-IDF, BERT-Embeddings und engineered Features.")
+st.markdown("---")
+st.markdown("🔍 Dieses Tool kombiniert klassische Textfeatures (TF-IDF), optional politische Zeichenmerkmale, und BERT-Embeddings zur Parteivorhersage.")
