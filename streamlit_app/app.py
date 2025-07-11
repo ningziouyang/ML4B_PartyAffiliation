@@ -5,42 +5,42 @@ import re
 import torch
 from transformers import AutoTokenizer, AutoModel
 
-# ==== Path einstellen ====
+# ==== 模型配置 ====
 MODEL_OPTIONS = {
     "TF-IDF baseline (no_urls)": {
-        "model": "../models/lr_model_no_urls.joblib",
-        "vectorizer": "../models/tfidf_no_urls.joblib",
+        "model": "models/lr_model_no_urls.joblib",
+        "vectorizer": "models/tfidf_no_urls.joblib",
         "scaler": None
     },
-    "TF-IDF + Extra Features (no_urls)": {
-        "model": "../models/lr_model_extra_no_urls.joblib",
-        "vectorizer": "../models/tfidf_extra_no_urls.joblib",
-        "scaler": "../models/scaler_extra_no_urls.joblib"
+    "TF-IDF + Extra Features": {
+        "model": "models/lr_model_extra_no_urls.joblib",
+        "vectorizer": "models/tfidf_extra_no_urls.joblib",
+        "scaler": "models/scaler_extra_no_urls.joblib"
     },
     "TF-IDF + BERT + Engineered": {
-        "model": "../models/lr_model_combined.joblib",
-        "vectorizer": "../models/tfidf_vectorizer_bert_engineered.joblib",
-        "scaler": "../models/feature_scaler_bert_engineered.joblib"
+        "model": "models/lr_tfidf_bert_engineered.joblib",
+        "vectorizer": "models/tfidf_vectorizer_bert_engineered.joblib",
+        "scaler": "models/feature_scaler_bert_engineered.joblib"
     }
 }
 
-# ==== Model auswählen ====
 st.title("Parteivorhersage für Bundestags-Tweets")
+
+# ==== 模型选择 ====
 choice = st.selectbox("Wähle ein Modell:", list(MODEL_OPTIONS.keys()))
 info = MODEL_OPTIONS[choice]
-
 model = joblib.load(info["model"])
 vectorizer = joblib.load(info["vectorizer"])
 scaler = joblib.load(info["scaler"]) if info["scaler"] else None
-
-# ==== BERT ====
 use_bert = "BERT" in choice
+
+# ==== 加载 BERT ====
 if use_bert:
     tokenizer = AutoTokenizer.from_pretrained("bert-base-german-cased")
     bert_model = AutoModel.from_pretrained("bert-base-german-cased")
     bert_model.eval()
 
-# ==== Feature Funktionen ====
+# ==== 特征工程 ====
 POLITICAL_TERMS = [
     "klimaschutz", "freiheit", "bürgergeld", "migration", "rente", "gerechtigkeit",
     "steuern", "digitalisierung", "gesundheit", "bildung", "europa", "verteidigung",
@@ -81,13 +81,8 @@ def uppercase_ratio(text):
     text = str(text)
     return sum(1 for c in text if c.isupper()) / len(text) if text else 0
 
-def multi_punct_count(text):
-    return len(re.findall(r"[!?]{2,}", str(text)))
-
-def count_political_terms(text):
-    text = str(text).lower()
-    return sum(1 for word in POLITICAL_TERMS if word in text)
-
+def multi_punct_count(text): return len(re.findall(r"[!?]{2,}", str(text)))
+def count_political_terms(text): return sum(1 for word in POLITICAL_TERMS if word in str(text).lower())
 def count_hashtags(text): return len(re.findall(r"#\w+", str(text)))
 def count_mentions(text): return len(re.findall(r"@\w+", str(text)))
 def count_urls(text): return len(re.findall(r"http\S+|www\S+|https\S+", str(text)))
@@ -104,17 +99,13 @@ def embed_single_text(text):
 tweet = st.text_area("Gib einen Bundestags-Tweet ein:")
 
 if tweet and st.button("Vorhersagen"):
-    # 1. TF-IDF
     X_tfidf = vectorizer.transform([tweet])
-    # 2. Extra Features
     if scaler:
         X_eng = extract_features(tweet)
         X_eng_scaled = scaler.transform(X_eng)
-    # 3. BERT
     if use_bert:
         X_bert = embed_single_text(tweet)
 
-    # ==== Kombiniere ====
     if use_bert:
         X_all = np.hstack([X_tfidf.toarray(), X_bert, X_eng_scaled])
     elif scaler:
@@ -122,7 +113,6 @@ if tweet and st.button("Vorhersagen"):
     else:
         X_all = X_tfidf
 
-    # ==== Vorhersage ====
     pred = model.predict(X_all)[0]
     st.success(f"**Vorhergesagte Partei:** {pred}")
 
@@ -132,4 +122,4 @@ if tweet and st.button("Vorhersagen"):
         st.bar_chart({p: float(prob) for p, prob in zip(model.classes_, probs)})
 
 st.markdown("---")
-st.markdown("🔍 Dieses Tool kombiniert klassische Textfeatures (TF-IDF), optional politische Zeichenmerkmale, und BERT-Embeddings zur Parteivorhersage.")
+st.markdown("🔍 Dieses Tool kombiniert TF-IDF, BERT und handgefertigte Merkmale zur Parteivorhersage.")
